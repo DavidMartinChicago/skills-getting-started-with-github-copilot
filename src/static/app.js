@@ -40,8 +40,16 @@ document.addEventListener("DOMContentLoaded", () => {
           participantsHtml = `<p class="participants-empty">No participants yet</p>`;
         } else {
           const shown = participants.slice(0, maxShown);
+
           const listItems = shown
-            .map((p) => `<li class="participant-item">${escapeHtml(p)}</li>`)
+            .map((p) => `
+              <li class="participant-item" data-activity="${escapeHtml(name)}" data-email="${escapeHtml(p)}">
+                <span class="participant-email">${escapeHtml(p)}</span>
+                <button class="delete-participant" title="Remove participant" aria-label="Remove participant" type="button">
+                  <span class="delete-icon">🗑️</span>
+                </button>
+              </li>
+            `)
             .join("");
 
           participantsHtml = `
@@ -50,7 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <ul class="participants-list">
                 ${listItems}
               </ul>
-            `;
+          `;
 
           if (participants.length > maxShown) {
             const more = participants.length - maxShown;
@@ -68,7 +76,32 @@ document.addEventListener("DOMContentLoaded", () => {
           ${participantsHtml}
         `;
 
+
         activitiesList.appendChild(activityCard);
+
+        // Add delete handler for participants (event delegation)
+        activityCard.addEventListener("click", async (e) => {
+          if (e.target.closest && e.target.closest(".delete-participant")) {
+            const li = e.target.closest(".participant-item");
+            if (!li) return;
+            const activity = li.getAttribute("data-activity");
+            const email = li.getAttribute("data-email");
+            if (!activity || !email) return;
+            if (!confirm(`Remove ${email} from ${activity}?`)) return;
+            try {
+              const response = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`, { method: "POST" });
+              const result = await response.json();
+              if (response.ok) {
+                // Refresh activities list
+                fetchActivities();
+              } else {
+                alert(result.detail || "Failed to remove participant.");
+              }
+            } catch (err) {
+              alert("Error removing participant.");
+            }
+          }
+        });
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -99,10 +132,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const result = await response.json();
 
+
       if (response.ok) {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities(); // Refresh activities list after signup
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";

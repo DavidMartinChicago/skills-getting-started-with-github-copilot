@@ -1,3 +1,7 @@
+
+# ...existing code...
+
+
 """
 High School Management System API
 
@@ -10,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")

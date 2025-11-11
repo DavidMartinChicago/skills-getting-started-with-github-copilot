@@ -4,6 +4,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Small helper to escape HTML when injecting text into innerHTML
+  function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return "";
+    return String(unsafe)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -20,14 +31,77 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Build participants markup: show up to 5 participants then an "and N more" note
+        const maxShown = 5;
+        const participants = Array.isArray(details.participants) ? details.participants : [];
+        let participantsHtml = "";
+
+        if (participants.length === 0) {
+          participantsHtml = `<p class="participants-empty">No participants yet</p>`;
+        } else {
+          const shown = participants.slice(0, maxShown);
+
+          const listItems = shown
+            .map((p) => `
+              <li class="participant-item" data-activity="${escapeHtml(name)}" data-email="${escapeHtml(p)}">
+                <span class="participant-email">${escapeHtml(p)}</span>
+                <button class="delete-participant" title="Remove participant" aria-label="Remove participant" type="button">
+                  <span class="delete-icon">🗑️</span>
+                </button>
+              </li>
+            `)
+            .join("");
+
+          participantsHtml = `
+            <div class="participants">
+              <strong>Participants</strong>
+              <ul class="participants-list">
+                ${listItems}
+              </ul>
+          `;
+
+          if (participants.length > maxShown) {
+            const more = participants.length - maxShown;
+            participantsHtml += `<div class="participants-more">and ${more} more</div>`;
+          }
+
+          participantsHtml += `</div>`;
+        }
+
         activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(details.description)}</p>
+          <p><strong>Schedule:</strong> ${escapeHtml(details.schedule)}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHtml}
         `;
 
+
         activitiesList.appendChild(activityCard);
+
+        // Add delete handler for participants (event delegation)
+        activityCard.addEventListener("click", async (e) => {
+          if (e.target.closest && e.target.closest(".delete-participant")) {
+            const li = e.target.closest(".participant-item");
+            if (!li) return;
+            const activity = li.getAttribute("data-activity");
+            const email = li.getAttribute("data-email");
+            if (!activity || !email) return;
+            if (!confirm(`Remove ${email} from ${activity}?`)) return;
+            try {
+              const response = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`, { method: "POST" });
+              const result = await response.json();
+              if (response.ok) {
+                // Refresh activities list
+                fetchActivities();
+              } else {
+                alert(result.detail || "Failed to remove participant.");
+              }
+            } catch (err) {
+              alert("Error removing participant.");
+            }
+          }
+        });
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -58,10 +132,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const result = await response.json();
 
+
       if (response.ok) {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities(); // Refresh activities list after signup
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
